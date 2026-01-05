@@ -6,7 +6,7 @@
  * wheels env switch staging --backup --force
  * wheels env switch testing --quiet
  */
-component extends="../base" {
+component aliases="wheels set env, wheels set environment,wheels set envr" extends="../base" {
     
     property name="environmentService" inject="EnvironmentService@wheels-cli";
     property name="detailOutput" inject="DetailOutputService@wheels-cli";
@@ -141,7 +141,7 @@ component extends="../base" {
                 if (structKeyExists(result, "oldEnvironment") && len(result.oldEnvironment)) {
                     detailOutput.update(".env file: Updated from #result.oldEnvironment# to #arguments.environment#", true);
                 } else {
-                    detailOutput.create(".env file", "Set to #arguments.environment# environment");
+                    detailOutput.create(".env file Set to #arguments.environment# environment", true);
                 }
             }
             
@@ -257,6 +257,7 @@ component extends="../base" {
         if (!fileExists(configFile)) {
             errors.append("config/#arguments.environment#/settings.cfm file not found");
         }
+    
         
         // If both files are missing, it's invalid
         if (arrayLen(errors) == 2) {
@@ -265,7 +266,7 @@ component extends="../base" {
                 error: "Environment '#arguments.environment#' is not configured. Missing required files: #arrayToList(errors, ' and ')#"
             };
         }
-        
+    
         // If one file exists but not the other, it's valid but with a warning
         if (arrayLen(errors) == 1) {
             return {
@@ -294,7 +295,6 @@ component extends="../base" {
                     error: ".env file not found"
                 };
             }
-            
             var backupFile = "#arguments.projectRoot#/.env.backup-#timestamp#";
             fileCopy(envFile, backupFile);
             
@@ -315,6 +315,7 @@ component extends="../base" {
             };
         }
     }
+
     
     /**
      * Restart the application

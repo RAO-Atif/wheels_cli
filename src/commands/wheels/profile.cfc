@@ -80,7 +80,6 @@ component extends="base" {
 
 		// Display results
 		displayProfileResults(local.profileResults, arguments.output);
-
 		// Save results if requested
 		if (len(arguments.save)) {
 			saveProfileResults(local.profileResults, arguments.save, arguments.output);

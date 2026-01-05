@@ -36,8 +36,60 @@ component extends="../base" {
 				error("Invalid environment: #arguments.environment#");
 				return;
 			}
-			
+	 	local.filePath = local.appPath & "/config/settings.cfm";
+        local.fileContent = fileRead(local.filePath);
+		local.targetPattern = '(?mi)^\s*set\s*\(\s*dataSourceName\s*=\s*["''].*?["'']\s*\)\s*;?';
+		if (reFindNoCase(local.targetPattern, local.fileContent)) {
+		local.updatedContent = reReplaceNoCase(
+			local.fileContent,
+			local.targetPattern,
+				chr(9) & 'set(dataSourceName="#arguments.datasourceName#");',
+				"one"
+			);
+
+			fileWrite(local.filePath, local.updatedContent);
+			print.boldGreenLine("Datasource replaced successfully");
+			return;
+		}
+		local.newPattern = '(?mi)^(\s*//\s*CLI-Appends Here)';
+
+		if (reFindNoCase(local.newPattern, local.fileContent)) {
+
+			local.updatedContent = reReplaceNoCase(
+			local.fileContent,
+			local.newPattern,
+				'\1' & chr(13) & chr(10) & chr(9) &
+				'set(dataSourceName="#arguments.datasourceName#");',
+				"one"
+			);
+
+			fileWrite(local.filePath, local.updatedContent);
+			print.boldGreenLine("Datasource added successfully");
+			return;
+		}
+		local.cfscriptCloseTag = "<" & "/cfscript>";
+		local.insertPosition  = findNoCase(local.cfscriptCloseTag, local.fileContent);
+
+		if (local.insertPosition > 0) {
+
+			local.updatedContent =
+				left(local.fileContent, local.insertPosition - 1) &
+				chr(13) & chr(10) &
+				chr(9) & 'set(dataSourceName="#arguments.datasourceName#");' &
+				chr(13) & chr(10) &
+				mid(local.fileContent, local.insertPosition);
+
+			fileWrite(local.filePath, local.updatedContent);
+			print.boldGreenLine("Datasource added inside " & local.filePath);
+		}
+		else {
+			print.RedLine("No" & local.cfscriptCloseTag & " tag found in setting file");
+		}
+		
+		return;
+	
 			// Use the set settings functionality
+		
 			local.settingsCommand = CreateObject("component", "settings");
 			local.settingsCommand.setShell(shell);
 			local.settingsCommand.setPrint(print);
@@ -68,7 +120,7 @@ component extends="../base" {
 				// Server might not be running, skip validation
 				print.line("Note: Unable to verify datasource configuration (server may not be running)");
 			}
-			
+	
 		} catch (any e) {
 			error("Error setting datasource: " & e.message);
 		}
@@ -87,7 +139,7 @@ component extends="../base" {
 				local.environment = Trim(Mid(local.envContent, local.envMatch.pos[2], local.envMatch.len[2]));
 			}
 		}
-		
+
 		// Check environment variable
 		if (!Len(local.environment)) {
 			local.sysEnv = CreateObject("java", "java.lang.System");
@@ -104,5 +156,7 @@ component extends="../base" {
 		
 		return local.environment;
 	}
+	
+
 
 }

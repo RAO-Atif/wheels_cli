@@ -26,6 +26,8 @@ component extends="../base" {
 			error("This command must be run from a Wheels application directory");
 			return;
 		}
+		local.appPath = getCWD();
+
 
 		try {
 			// Determine environment
@@ -40,26 +42,81 @@ component extends="../base" {
 				return;
 			}
 
-			print.line();
-			print.boldLine("Setting Configuration Value");
-			print.line();
-			print.yellowLine("Note: This command provides guidance on setting configuration values.");
-			print.yellowLine("You need to manually edit your settings file.");
-			print.line();
+			local.environment = getEnvironment(local.appPath);
+			writeOutput("Current environment detected: " & local.environment & Chr(10));
+
+			local.configDir = local.appPath & "/config/";
+			switch (local.environment) {
+				case "development":
+					local.settingsFile = local.configDir & "development/settings.cfm";
+					break;
+				case "testing":
+					local.settingsFile = local.configDir & "testing/settings.cfm";
+					break;
+				case "production":
+					local.settingsFile = local.configDir & "production/settings.cfm";
+					break;
+				case "maintenance":
+					local.settingsFile = local.configDir & "maintenance/settings.cfm";
+					break;
+				default:
+					local.settingsFile = local.configDir & "settings.cfm";
+			}
+			print.line("Settings file to update: " & local.settingsFile & Chr(10));
+
+
+			if (!FileExists(local.settingsFile)) {
+				print.line("Settings file not found for environment: " & local.environment & Chr(10));
+				return;
+			}
+
+			local.fileContent = FileRead(local.settingsFile);
+
+			if (CompareNoCase(arguments.value, "true") == 0 || CompareNoCase(arguments.value, "false") == 0) {
+				local.newValue = LCase(arguments.value); 
+			} else if (IsNumeric(arguments.value)) {
+				local.newValue = arguments.value;
+			} else {
+				local.newValue = '"' & Replace(arguments.value, '"', '""', "all") & '"'; 
+			}
+
+			local.pattern =
+                       "(?mi)^\s*set\s*\(\s*" & arguments.settingName & "\s*=\s*[^;\r\n]*\s*\)\s*;";
+			local.newLine = "    set(" & arguments.settingName & " = " & local.newValue & ");";
+
+			if (REFindNoCase(local.pattern, local.fileContent)) {			
+				local.finalContent = REReplaceNoCase(
+					local.fileContent,
+					local.pattern,
+					local.newLine,
+					"all"
+				);
+
+				FileWrite(local.settingsFile, local.finalContent);
+				print.line("Updated setting: " & arguments.settingName & " = " & local.newValue & Chr(10));
+
+			} else {
+				
+				local.cfscriptCloseTag = "<" & "/cfscript>";
+				local.insertPos = FindNoCase(local.cfscriptCloseTag, local.fileContent);
+
+				if (local.insertPos GT 0) {
+
+					local.finalContent =
+						Left(local.fileContent, local.insertPos - 1) &
+						Chr(13) & Chr(10) &
+						local.newLine &
+						Chr(13) & Chr(10) &
+						Mid(local.fileContent, local.insertPos);
+
+					FileWrite(local.settingsFile, local.finalContent);
+					print.line("Inserted setting: " & arguments.settingName & " = " & local.newValue & Chr(10));
+
+				} else {
+					print.cyanLine("<" & "cfscript> tag found in settings file");
+				}
+			}
 			
-			// Determine settings file path
-			local.settingsFile = local.appPath & "/config/" & arguments.environment & "/settings.cfm";
-			
-			// Convert value to appropriate type
-			local.formattedValue = formatValue(arguments.value);
-			
-			print.line("To set this configuration value, add or update the following in your settings file:");
-			print.line();
-			print.greenLine("File: " & local.settingsFile);
-			print.line();
-			print.line("Add this line inside the cfscript tags:");
-			print.boldCyanLine("    set(" & arguments.settingName & " = " & local.formattedValue & ");");
-			print.line();
 			
 			// Create directory if it doesn't exist
 			local.settingsDir = GetDirectoryFromPath(local.settingsFile);
@@ -89,40 +146,6 @@ component extends="../base" {
 		}
 	}
 
-	private string function getEnvironment(required string appPath) {
-		// Same logic as get environment command
-		local.environment = "";
-
-		// Check .env file
-		local.envFile = arguments.appPath & "/.env";
-		if (FileExists(local.envFile)) {
-			local.envContent = FileRead(local.envFile);
-			local.envMatch = REFind("(?m)^WHEELS_ENV\s*=\s*(.+)$", local.envContent, 1, true);
-			if (local.envMatch.pos[1] > 0) {
-				local.environment = Trim(Mid(local.envContent, local.envMatch.pos[2], local.envMatch.len[2]));
-			}
-		}
-
-		// Check environment variable
-		if (!Len(local.environment)) {
-			try {
-				local.sysEnv = CreateObject("java", "java.lang.System");
-				local.wheelsEnv = local.sysEnv.getenv("WHEELS_ENV");
-				if (!IsNull(local.wheelsEnv) && Len(local.wheelsEnv)) {
-					local.environment = local.wheelsEnv;
-				}
-			} catch (any e) {
-				// Environment variable not accessible
-			}
-		}
-
-		// Default to development
-		if (!Len(local.environment)) {
-			local.environment = "development";
-		}
-
-		return local.environment;
-	}
 
 	private string function formatValue(required string value) {
 		// Handle boolean values
@@ -144,5 +167,4 @@ component extends="../base" {
 		local.escaped = Replace(arguments.value, '"', '""', "all");
 		return '"' & local.escaped & '"';
 	}
-
 }

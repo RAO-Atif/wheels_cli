@@ -46,7 +46,9 @@ component extends="base" {
 					print.redLine("No routes found in the application");
 					return;
 				}
-			} else {
+			} 
+			
+			else {
 				local.routes = local.result.routes;
 			}
 			
@@ -66,6 +68,7 @@ component extends="base" {
 				}
 				local.routes = local.filteredRoutes;
 			}
+			
 			
 			if (ArrayLen(local.routes) == 0) {
 				print.yellowLine("No routes found matching '#arguments.name#'");
@@ -109,7 +112,6 @@ component extends="base" {
 					if (IsArray(local.methods)) {
 						local.methods = ArrayToList(local.methods, ",");
 					}
-					
 					print.text(PadRight(Left(local.name, local.nameWidth - 1), local.nameWidth));
 					print.text(PadRight(Left(local.methods, local.methodWidth - 1), local.methodWidth));
 					print.text(PadRight(Left(local.pattern, local.patternWidth - 1), local.patternWidth));

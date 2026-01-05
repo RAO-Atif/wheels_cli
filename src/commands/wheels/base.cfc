@@ -891,7 +891,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				}
 			}
 		}
-
+		
 		// Check environment variable (case-insensitive)
 		if (!Len(local.environment)) {
 			local.sysEnv = CreateObject("java", "java.lang.System");
@@ -903,7 +903,6 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				}
 			}
 		}
-
 		// Default to development
 		if (!Len(local.environment)) {
 			local.environment = "development";
@@ -1631,3 +1630,4 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
    
 
 }
+

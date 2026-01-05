@@ -36,7 +36,6 @@ component extends="base" {
 		print.greenLine("  Version: " & getWheelsCliVersion());
 		print.greenLine("  Location: " & expandPath("/wheels-cli/"));
 		print.line();
-		
 		// Application Info
 		if (isWheelsInstall(local.appPath) || isWheelsApp(local.appPath)) {
 			print.boldGreenLine("Application");
@@ -144,7 +143,7 @@ component extends="base" {
 					if (Len(local.serverInfo.engineVersion) && local.serverInfo.engineVersion != "Unknown") {
 						local.result.version = local.serverInfo.engineVersion;
 					}
-
+					
 					return local.result;
 				}
 			}
@@ -204,7 +203,6 @@ component extends="base" {
 
 		return "";
 	}
-
 	private string function getApplicationEnvironment(required string appPath) {
 		// Check for environment setting
 		try {

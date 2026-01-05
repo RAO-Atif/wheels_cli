@@ -32,7 +32,6 @@ component extends="../base" {
         if (len(trim(arguments.environment))) {
             local.urlParams &= "&environment=#arguments.environment#";
         }
-        
         if (len(trim(arguments.filter))) {
             local.urlParams &= "&filter=#arguments.filter#";
         }
@@ -47,7 +46,7 @@ component extends="../base" {
         if(!local.result.success){
             return;
         }
-        
+      
         // Display results
         if (structKeyExists(local.result, "config") && isStruct(local.result.config)) {
             // Get environment
