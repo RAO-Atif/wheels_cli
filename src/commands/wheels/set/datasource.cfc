@@ -36,11 +36,12 @@ component extends="../base" {
 				error("Invalid environment: #arguments.environment#");
 				return;
 			}
-	 	local.filePath = local.appPath & "/config/settings.cfm";
-        local.fileContent = fileRead(local.filePath);
-		local.targetPattern = '(?mi)^\s*set\s*\(\s*dataSourceName\s*=\s*["''].*?["'']\s*\)\s*;?';
-		if (reFindNoCase(local.targetPattern, local.fileContent)) {
-		local.updatedContent = reReplaceNoCase(
+			local.filePath = local.appPath & "/config/settings.cfm";
+			local.fileContent = fileRead(local.filePath);
+			local.targetPattern = '(?mi)^\s*set\s*\(\s*dataSourceName\s*=\s*["''].*?["'']\s*\)\s*;?';
+
+			if (reFindNoCase(local.targetPattern, local.fileContent)) {
+			local.updatedContent = reReplaceNoCase(
 			local.fileContent,
 			local.targetPattern,
 				chr(9) & 'set(dataSourceName="#arguments.datasourceName#");',
@@ -51,9 +52,9 @@ component extends="../base" {
 			print.boldGreenLine("Datasource replaced successfully");
 			return;
 		}
-		local.newPattern = '(?mi)^(\s*//\s*CLI-Appends Here)';
+		    local.newPattern = '(?mi)^(\s*//\s*CLI-Appends Here)';
 
-		if (reFindNoCase(local.newPattern, local.fileContent)) {
+		    if (reFindNoCase(local.newPattern, local.fileContent)) {
 
 			local.updatedContent = reReplaceNoCase(
 			local.fileContent,
@@ -67,8 +68,8 @@ component extends="../base" {
 			print.boldGreenLine("Datasource added successfully");
 			return;
 		}
-		local.cfscriptCloseTag = "<" & "/cfscript>";
-		local.insertPosition  = findNoCase(local.cfscriptCloseTag, local.fileContent);
+			local.cfscriptCloseTag = "<" & "/cfscript>";
+			local.insertPosition  = findNoCase(local.cfscriptCloseTag, local.fileContent);
 
 		if (local.insertPosition > 0) {
 
@@ -89,7 +90,18 @@ component extends="../base" {
 		return;
 	
 			// Use the set settings functionality
-		
+				//local.detectContent = removeSupportedComments(local.fileContent);
+			// Use the set settings functionality
+			/*
+			local.targetPattern ='(?mi)^\s*set\s*\(\s*dataSourceName\s*=\s*["''].*?["'']\s*\)\s*;?';
+			local.hasDatasource = reFindNoCase(local.targetPattern, local.detectContent);
+			local.cleanedContent = reReplaceNoCase(
+				local.fileContent,
+				local.targetPattern,
+				"",
+				"all"
+			);
+			*/
 			local.settingsCommand = CreateObject("component", "settings");
 			local.settingsCommand.setShell(shell);
 			local.settingsCommand.setPrint(print);

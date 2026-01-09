@@ -52,7 +52,11 @@ component  aliases='wheels g route, wheels g routes, wheels generate routes' ext
 		}
 
 		var target = fileSystemUtil.resolvePath("config/routes.cfm");
-		var content = fileRead(target);
+
+		// Read file ONCE
+		var originalContent = fileRead(target);        // preserve comments & formatting
+		var content = removeComments(originalContent); // used ONLY for duplicate checks
+
 		var inject = "";
 		var routeType = "";
 
@@ -96,35 +100,49 @@ component  aliases='wheels g route, wheels g routes, wheels generate routes' ext
 			routeType = "resources";
 		}
 
-		// Find the correct indentation level
-		var baseIndent = chr(9) & chr(9) & chr(9);
-		var markerPattern = baseIndent & '// CLI-Appends-Here';
-		if (!find(markerPattern, content)) {
-			baseIndent = chr(9) & chr(9);
-			markerPattern = baseIndent & '// CLI-Appends-Here';
-		}
-		if (!find(markerPattern, content)) {
-			baseIndent = chr(9);
-			markerPattern = baseIndent & '// CLI-Appends-Here';
-		}
-		if (!find(markerPattern, content)) {
-			baseIndent = '';
-			markerPattern = '// CLI-Appends-Here';
-		}
+			// Route generation by using cli 
+			// Find the correct indentation level
+			var baseIndent = chr(9) & chr(9);
+			var marker = baseIndent & '// CLI-Appends-Here';
+			var injectLocation = '';
+			var injectPoint = '';
+			// Check for duplicate route before injecting
+			if (findNoCase(inject, content)) {
+				details.skip("config/routes.cfm (route already exists)");
+				return;
+			}
 
-		// Add proper indentation to inject
-		inject = baseIndent & inject;
+			if (find(marker, content)) {
+				injectLocation = 'marker';
+				injectPoint = marker;
+			} 
+			else if (find('mapper()', content)) {
+				injectLocation = 'mapper';
+				injectPoint = 'mapper()';
+			} 
+			else {
+				details.skip("No valid injection point found");
+				return;
+			}
+			var formattedInject = baseIndent & inject;
 
-		// Check for duplicate route before injecting
-		if (findNoCase(inject, content)) {
-			details.skip("config/routes.cfm (route already exists)");
-			return;
-		}
+				if (injectLocation == 'marker') {
+			originalContent = replace(
+				originalContent,
+				injectPoint,
+				formattedInject & cr & injectPoint,
+				"one"
+			);
+			} else {
+				originalContent = replace(
+					originalContent,
+					injectPoint,
+					injectPoint & cr & formattedInject,
+					"one"
+				);
+			}
+				file action='write' file='#target#' mode='777' output='#trim(originalContent)#';
 
-		// Replace the marker with the new route followed by the marker on a new line
-		content = replace(content, markerPattern, inject & cr & markerPattern, 'all');
-
-		file action='write' file='#target#' mode='777' output='#trim(content)#';
 
 		// Output detail message
 		details.header("Route Generation");

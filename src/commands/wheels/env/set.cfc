@@ -8,7 +8,7 @@
  * wheels env set --file=.env.production API_KEY=secret
  * {code}
  */
-component extends="commandbox.modules.wheels-cli.commands.wheels.base" {
+component extends="../base" {
 
 	// Inject DetailOutputService
 	property name="detailOutput" inject="DetailOutputService@wheels-cli";

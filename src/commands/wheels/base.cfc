@@ -981,6 +981,44 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 		}
 	}
 
+	// comment function 
+			public boolean function addLineIgnoringComments(required string filePath, required string newLine) {
+			if (!FileExists(arguments.filePath)) {
+				printLine("File not found: " & arguments.filePath);
+				return false;
+			}
+			local.content = FileRead(arguments.filePath);
+			local.lines = ListToArray(local.content, Chr(10));
+		
+			local.nonCommentLines = [];
+			for (local.line in local.lines) {
+				if (!REFindNoCase("^\s*//", local.line) && 
+					!REFindNoCase("^\s*/\*", local.line)&&         
+					!REFindNoCase("<!---[\s\S]*?--->", local.line)) {
+					ArrayAppend(local.nonCommentLines, local.line);
+				}
+			}
+			if (ArrayFindNoCase(local.nonCommentLines, arguments.newLine)) {
+				Print.Line("Line already exists in non-comment lines. Skipping.");
+				return false;
+			}
+			// append at the end 
+			FileWrite(arguments.filePath, local.content & Chr(10) & arguments.newLine & Chr(10));
+			Print.Line("Added line: " & arguments.newLine);
+			return true;
+		}	
+
+       // Helper function to remove comments from content
+	public function removeComments(content) {
+            var cleanedContent = content;
+            cleanedContent = replace(cleanedContent, "// CLI-Appends-Here", "##CLI_APPENDS_HERE##", "ALL");
+            cleanedContent = reReplace(cleanedContent, "<!---[\s\S]*?--->", "", "ALL");
+            cleanedContent = reReplace(cleanedContent, "\/\*[\s\S]*?\*\/", "", "ALL");
+            cleanedContent = reReplace(cleanedContent, "//[^\r\n]*", "", "ALL");
+            cleanedContent = replace(cleanedContent, "##CLI_APPENDS_HERE##", "// CLI-Appends-Here", "ALL");
+            return cleanedContent;
+        }
+		
 	/**
 	 * Build JDBC URL for connecting to system database (for database creation/management)
 	 */
@@ -1630,4 +1668,6 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
    
 
 }
+
+
 
