@@ -23,7 +23,6 @@ component extends="../base" {
 			error("This command must be run from a Wheels application directory");
 			return;
 		}
-
 		try {
 			// Determine environment
 			if (!Len(arguments.environment)) {
@@ -36,58 +35,61 @@ component extends="../base" {
 				error("Invalid environment: #arguments.environment#");
 				return;
 			}
-			local.filePath = local.appPath & "/config/settings.cfm";
-			local.fileContent = fileRead(local.filePath);
+			// datasource added by commands 
+	 	    local.filePath = local.appPath & "/config/settings.cfm";
+			local.originalContent = fileRead(local.filePath);
+            local.activeContent   = removeComments(local.originalContent); 
+
 			local.targetPattern = '(?mi)^\s*set\s*\(\s*dataSourceName\s*=\s*["''].*?["'']\s*\)\s*;?';
 
-			if (reFindNoCase(local.targetPattern, local.fileContent)) {
-			local.updatedContent = reReplaceNoCase(
-			local.fileContent,
-			local.targetPattern,
-				chr(9) & 'set(dataSourceName="#arguments.datasourceName#");',
-				"one"
-			);
+			    if (reFindNoCase(local.targetPattern, local.activeContent)) {
+					local.updatedContent = reReplaceNoCase(
+						local.originalContent,
+						local.targetPattern,
+						chr(9) & 'set(dataSourceName="#arguments.datasourceName#");',
+						"one"
+					);
 
-			fileWrite(local.filePath, local.updatedContent);
-			print.boldGreenLine("Datasource replaced successfully");
-			return;
-		}
-		    local.newPattern = '(?mi)^(\s*//\s*CLI-Appends Here)';
+						fileWrite(local.filePath, local.updatedContent);
+						print.boldGreenLine("Datasource replaced successfully");
+						return;
+					}
 
-		    if (reFindNoCase(local.newPattern, local.fileContent)) {
-
-			local.updatedContent = reReplaceNoCase(
-			local.fileContent,
-			local.newPattern,
-				'\1' & chr(13) & chr(10) & chr(9) &
+		    local.newPattern = '(?i)(\s*//\s*CLI-Appends-Here)';
+		        if (reFindNoCase(local.newPattern, local.activeContent)) {
+										local.updatedContent = reReplaceNoCase(
+							local.originalContent,
+							local.newPattern,
+							chr(13) & chr(10) &
+							chr(9) & 'set(dataSourceName="#arguments.datasourceName#");' &
+							chr(13) & chr(10) &
+							'\1',
+							"one"
+						);
+						/*
+						'\1' & chr(13) & chr(10) & chr(9) &
 				'set(dataSourceName="#arguments.datasourceName#");',
-				"one"
-			);
+						*/
+					fileWrite(local.filePath, local.updatedContent);
+					print.boldGreenLine("Datasource added successfully");
+					return;
+				}
 
-			fileWrite(local.filePath, local.updatedContent);
-			print.boldGreenLine("Datasource added successfully");
-			return;
-		}
 			local.cfscriptCloseTag = "<" & "/cfscript>";
-			local.insertPosition  = findNoCase(local.cfscriptCloseTag, local.fileContent);
+			local.insertPosition  = findNoCase(local.cfscriptCloseTag, local.originalContent);
 
-		if (local.insertPosition > 0) {
+				if (local.insertPosition > 0) {
+					local.updatedContent =
+						left(local.originalContent, local.insertPosition - 1) & 
+						chr(13) & chr(10) & chr(9) &
+						'set(dataSourceName="#arguments.datasourceName#");' &
+						chr(13) & chr(10) &
+						mid(local.originalContent, local.insertPosition);
 
-			local.updatedContent =
-				left(local.fileContent, local.insertPosition - 1) &
-				chr(13) & chr(10) &
-				chr(9) & 'set(dataSourceName="#arguments.datasourceName#");' &
-				chr(13) & chr(10) &
-				mid(local.fileContent, local.insertPosition);
-
-			fileWrite(local.filePath, local.updatedContent);
-			print.boldGreenLine("Datasource added inside " & local.filePath);
-		}
-		else {
-			print.RedLine("No" & local.cfscriptCloseTag & " tag found in setting file");
-		}
-		
-		return;
+					fileWrite(local.filePath, local.updatedContent);
+					print.boldGreenLine("Datasource added inside " & local.filePath);
+				}
+		           return;
 	
 			// Use the set settings functionality
 				//local.detectContent = removeSupportedComments(local.fileContent);
