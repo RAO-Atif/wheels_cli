@@ -7,6 +7,7 @@
  * wheels docker logs tail=50 servers=web1.example.com
  * wheels docker logs service=db
  * wheels docker logs since=1h
+ * wheels docker logs --remote
  * {code}
  */
 component extends="DockerCommand" {
@@ -17,15 +18,25 @@ component extends="DockerCommand" {
      * @follow Follow log output in real-time (default: false)
      * @service Service to show logs for: app or db (default: app)
      * @since Show logs since timestamp (e.g., "2023-01-01", "1h", "5m")
+     * @remote Fetch logs from remote Docker container instead of local
      */
     function run(
         string servers="",
         string tail="100",
         boolean follow=false,
         string service="app",
-        string since=""
+        string since="",
+        boolean remote=false
     ) {
+        //ensure we are in a Wheels app
+        requireWheelsApp(getCWD());
+        // Reconstruct arguments for handling --key=value style
         arguments = reconstructArgs(arguments);
+        
+        if (arguments.remote == false) {
+            fetchLocalLogs(arguments.tail, arguments.follow, arguments.service, arguments.since);
+            return;
+        }
         
         // Load servers
         var serverList = [];
@@ -33,6 +44,8 @@ component extends="DockerCommand" {
         // Check for deploy-servers file (text or json) in current directory
         var textConfigPath = fileSystemUtil.resolvePath("deploy-servers.txt");
         var jsonConfigPath = fileSystemUtil.resolvePath("deploy-servers.json");
+        var ymlConfigPath = fileSystemUtil.resolvePath("config/deploy.yml");
+        var projectName = getProjectName();
         
         // If specific servers argument is provided
         if (len(trim(arguments.servers))) {
@@ -49,15 +62,36 @@ component extends="DockerCommand" {
                 for (var host in hosts) {
                     arrayAppend(serverList, {
                         "host": trim(host),
-                        "user": "deploy", // Default user
+                        "user": "deploy", 
                         "port": 22,
-                        "remoteDir": "/home/deploy/app", // Default
-                        "imageName": "app" // Default
+                        "remoteDir": "/home/deploy/#projectName#", 
+                        "imageName": projectName 
                     });
                 }
             }
         } 
-        // Otherwise, look for default files
+        // 1. Look for config/deploy.yml first
+        else if (fileExists(ymlConfigPath)) {
+            var deployConfig = getDeployConfig();
+            if (arrayLen(deployConfig.servers)) {
+                print.cyanLine("Found config/deploy.yml, loading server configuration").toConsole();
+                serverList = deployConfig.servers;
+                
+                // Add defaults for missing fields
+                for (var s in serverList) {
+                    if (!structKeyExists(s, "remoteDir")) {
+                        s.remoteDir = "/home/#s.user#/#projectName#";
+                    }
+                    if (!structKeyExists(s, "port")) {
+                        s.port = 22;
+                    }
+                    if (!structKeyExists(s, "imageName")) {
+                        s.imageName = projectName;
+                    }
+                }
+            }
+        }
+        // 2. Otherwise, look for default files
         else if (fileExists(textConfigPath)) {
             print.cyanLine("Found deploy-servers.txt, loading server configuration").toConsole();
             serverList = loadServersFromTextFile("deploy-servers.txt");
@@ -65,7 +99,7 @@ component extends="DockerCommand" {
             print.cyanLine("Found deploy-servers.json, loading server configuration").toConsole();
             serverList = loadServersFromConfig("deploy-servers.json");
         } else {
-            error("No server configuration found. Create deploy-servers.txt or deploy-servers.json in your project root.");
+            error("No server configuration found. Use 'wheels docker init' or create deploy-servers.txt.");
         }
 
         if (arrayLen(serverList) == 0) {
@@ -113,7 +147,8 @@ component extends="DockerCommand" {
         local.host = arguments.serverConfig.host;
         local.user = arguments.serverConfig.user;
         local.port = structKeyExists(arguments.serverConfig, "port") ? arguments.serverConfig.port : 22;
-        local.imageName = structKeyExists(arguments.serverConfig, "imageName") ? arguments.serverConfig.imageName : "#local.user#-app";
+        local.projectName = getProjectName();
+        local.imageName = structKeyExists(arguments.serverConfig, "imageName") ? arguments.serverConfig.imageName : local.projectName;
 
         // 1. Check SSH Connection (skip if following to save time/output noise?)
         // Better to check to avoid hanging on bad connection
@@ -211,6 +246,92 @@ component extends="DockerCommand" {
         
         if (result.exitCode != 0 && result.exitCode != 130) {
             throw("Command failed with exit code: " & result.exitCode);
+        }
+    }
+
+    private function fetchLocalLogs(
+        string tail, 
+        boolean follow, 
+        string service, 
+        string since
+    ) {
+        var projectName = getProjectName();
+        var containerName = "";
+        
+        if (arguments.service == "app") {
+            // Find app container
+            // Filter by name (including blue/green variants)
+            var findCmd = ["docker", "ps", "--format", "{{.Names}}", "--filter", "name=" & projectName];
+            
+            var findResult = runLocalCommand(findCmd, false);
+            var runningContainers = listToArray(trim(findResult.output), chr(10));
+            
+            if (arrayLen(runningContainers) > 0) {
+                // Default to first found
+                containerName = runningContainers[1];
+                
+                // Try to find exact match or blue/green
+                for (var container in runningContainers) {
+                    if (container == projectName || container == projectName & "-blue" || container == projectName & "-green") {
+                        containerName = container;
+                        break;
+                    }
+                }
+            }
+        } else {
+            // Attempt to find service container (e.g. db)
+            // Try common patterns: [project]-[service], [service]
+            var patterns = [
+                projectName & "-" & arguments.service,
+                arguments.service
+            ];
+            
+            for (var pattern in patterns) {
+                var findServiceCmd = ["docker", "ps", "--format", "{{.Names}}", "--filter", "name=" & pattern];
+                
+                var serviceResult = runLocalCommand(findServiceCmd, false);
+                if (serviceResult.exitCode == 0 && len(trim(serviceResult.output))) {
+                    containerName = listFirst(trim(serviceResult.output), chr(10));
+                    break;
+                }
+            }
+        }
+
+        if (!len(containerName)) {
+            error("Could not find running container for service: " & arguments.service);
+        }
+
+        print.line();
+        print.boldMagentaLine("Wheels Deployment Logs (Local)");
+        print.line("==================================================").toConsole();
+        print.cyanLine("Fetching logs from local container: " & containerName).toConsole();
+        
+        if (arguments.follow) {
+            print.yellowLine("Following logs... (Press Ctrl+C to stop)").toConsole();
+        }
+        print.line("----------------------------------------").toConsole();
+        
+        // Construct Docker Logs Command
+        var dockerCmd = ["docker", "logs"];
+        
+        if (len(arguments.tail)) {
+            dockerCmd.addAll(["--tail", arguments.tail]);
+        }
+        
+        if (len(arguments.since)) {
+            dockerCmd.addAll(["--since", arguments.since]);
+        }
+        
+        if (arguments.follow) {
+            dockerCmd.add("-f");
+        }
+        
+        dockerCmd.add(containerName);
+        
+        var result = runInteractiveCommand(dockerCmd);
+        
+        if (result.exitCode != 0 && result.exitCode != 130) {
+            error("Command failed with exit code: " & result.exitCode);
         }
     }
 

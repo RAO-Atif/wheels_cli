@@ -8,6 +8,8 @@
  */
 component extends="../base" {
 
+	property name="detailOutput" inject="DetailOutputService@wheels-cli";
+
 	/**
 	 * @datasourceName The name of the datasource to use
 	 * @environment Optional environment to set the datasource for (default: current)
@@ -18,6 +20,8 @@ component extends="../base" {
 		string environment = ""
 	) {
 		local.appPath = getCWD();
+		detailOutput.output(local.appPath);
+		detailOutput.output(local.appPath  & "atifrao");
 		
 		if (!isWheelsApp(local.appPath)) {
 			error("This command must be run from a Wheels application directory");
@@ -51,10 +55,10 @@ component extends="../base" {
 					);
 
 						fileWrite(local.filePath, local.updatedContent);
-						print.boldGreenLine("Datasource replaced successfully");
+						detailOutput.statusFixed("Datasource replaced successfully");
 						return;
 					}
-
+            
 		    local.newPattern = '(?i)(\s*//\s*CLI-Appends-Here)';
 		        if (reFindNoCase(local.newPattern, local.activeContent)) {
 										local.updatedContent = reReplaceNoCase(
@@ -71,7 +75,7 @@ component extends="../base" {
 				'set(dataSourceName="#arguments.datasourceName#");',
 						*/
 					fileWrite(local.filePath, local.updatedContent);
-					print.boldGreenLine("Datasource added successfully");
+					detailOutput.statusSuccess("Datasource added successfully");
 					return;
 				}
 
@@ -87,7 +91,7 @@ component extends="../base" {
 						mid(local.originalContent, local.insertPosition);
 
 					fileWrite(local.filePath, local.updatedContent);
-					print.boldGreenLine("Datasource added inside " & local.filePath);
+					detailOutput.statusSuccess("Datasource added inside " & local.filePath);
 				}
 		           return;
 	
@@ -115,8 +119,8 @@ component extends="../base" {
 				environment = arguments.environment
 			);
 			
-			print.line();
-			print.boldGreenLine("Datasource set to: " & arguments.datasourceName);
+			detailOutput.output();
+			detailOutput.statusSuccess("Datasource set to: " & arguments.datasourceName);
 			
 			// Additional datasource validation if server is running
 			try {

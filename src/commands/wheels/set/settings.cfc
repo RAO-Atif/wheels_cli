@@ -8,6 +8,7 @@
  * {code}
  */
 component extends="../base" {
+	property name="detailOutput" inject="DetailOutputService@wheels-cli";
 
 	/**
 	 * @settingName The name of the setting to set
@@ -20,7 +21,7 @@ component extends="../base" {
 		required string value,
 		string environment = ""
 	) {
-		local.appPath = getCWD();
+		    local.appPath = getCWD();
 
 		if (!isWheelsApp(local.appPath)) {
 			error("This command must be run from a Wheels application directory");
@@ -43,7 +44,7 @@ component extends="../base" {
 			}
 
 			local.environment = getEnvironment(local.appPath);
-			writeOutput("Current environment detected: " & local.environment & Chr(10));
+			detailOutput.output("Current environment detected: " & local.environment & Chr(10));
 
 			local.configDir = local.appPath & "/config/";
 			switch (local.environment) {
@@ -62,11 +63,11 @@ component extends="../base" {
 				default:
 					local.settingsFile = local.configDir & "settings.cfm";
 			}
-			print.line("Settings file to update: " & local.settingsFile & Chr(10));
+			detailOutput.success("Settings file to update: " & local.settingsFile & Chr(10));
 
 
 			if (!FileExists(local.settingsFile)) {
-				print.line("Settings file not found for environment: " & local.environment & Chr(10));
+				detailOutput.output("Settings file not found for environment: " & local.environment & Chr(10));
 				return;
 			}
 
@@ -93,7 +94,7 @@ component extends="../base" {
 				);
 
 				FileWrite(local.settingsFile, local.finalContent);
-				print.line("Updated setting: " & arguments.settingName & " = " & local.newValue & Chr(10));
+				("Updated setting: " & arguments.settingName & " = " & local.newValue & Chr(10));
 
 			} else {
 				
@@ -110,10 +111,10 @@ component extends="../base" {
 						Mid(local.fileContent, local.insertPos);
 
 					FileWrite(local.settingsFile, local.finalContent);
-					print.line("Inserted setting: " & arguments.settingName & " = " & local.newValue & Chr(10));
+					detailOutput.success("Inserted setting: " & arguments.settingName & " = " & local.newValue & Chr(10));
 
 				} else {
-					print.cyanLine("<" & "cfscript> tag found in settings file");
+					detailOutput.success("<" & "cfscript> tag found in settings file");
 				}
 			}
 			
@@ -121,22 +122,19 @@ component extends="../base" {
 			// Create directory if it doesn't exist
 			local.settingsDir = GetDirectoryFromPath(local.settingsFile);
 			if (!DirectoryExists(local.settingsDir)) {
-				print.line("The environment directory doesn't exist yet.");
-				print.line("Create it with: mkdir " & local.settingsDir);
+				detailOutput.output("The environment directory doesn't exist yet.");
+				detailOutput.output("Create it with: mkdir " & local.settingsDir);
 				print.line();
 			}
 			
 			if (!FileExists(local.settingsFile)) {
-				print.line("If the file doesn't exist, create it with this content:");
+				detailOutput.output("If the file doesn't exist, create it with this content:");
 				print.line();
-				print.cyanLine("<" & "cfscript>");
-				print.cyanLine("    set(" & arguments.settingName & " = " & local.formattedValue & ");");
-				print.cyanLine("</" & "cfscript>");
+				detailOutput.output("<" & "cfscript>");
+				detailOutput.output("    set(" & arguments.settingName & " = " & local.formattedValue & ");");
+				detailOutput.output("</" & "cfscript>");
 			}
 			
-			print.line();
-			print.yellowLine("After making the change, reload your application with:");
-			print.line("wheels reload " & arguments.environment);
 
 		} catch (any e) {
 			error("Error: " & e.message);
