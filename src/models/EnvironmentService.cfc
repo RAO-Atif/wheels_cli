@@ -19,6 +19,8 @@ component {
         string username = "",
         string password = "",
         string sid = "",
+        string servicename = "",
+        string oracleConnectionType = "sid",
         boolean force = false,
         string base = "",
         boolean debug = false,
@@ -49,7 +51,9 @@ component {
                     port = arguments.port,
                     username = arguments.username,
                     password = arguments.password,
-                    sid = arguments.sid
+                    sid = arguments.sid,
+                    servicename = arguments.servicename,
+                    oracleConnectionType = arguments.oracleConnectionType
                 );
             }
 
@@ -140,11 +144,6 @@ component {
         string sort = "name",
         boolean help = false
     ) {
-        // Show help information if requested
-        if (arguments.help) {
-            return getHelpInformation();
-        }
-
         var environments = [];
         var projectRoot = arguments.rootPath;
         
@@ -498,6 +497,8 @@ component {
         var dbUsername = len(trim(arguments.username)) ? arguments.username : getDefaultUsername(arguments.dbtype);
         var dbPassword = len(trim(arguments.password)) ? arguments.password : getDefaultPassword(arguments.dbtype);
         var dbSid = len(trim(arguments.sid)) ? arguments.sid : "ORCL";
+        var dbServiceName = len(trim(arguments.servicename)) ? arguments.servicename : "";
+        var dbOracleConnectionType = len(trim(arguments.oracleConnectionType)) ? arguments.oracleConnectionType : "sid";
 
         // Database-specific configuration
         switch (arguments.dbtype) {
@@ -535,7 +536,7 @@ component {
                 };
                 break;
             case "oracle":
-                config.datasourceInfo = {
+                var oracleDsInfo = {
                     driver: "Oracle",
                     host: dbHost,
                     port: dbPort,
@@ -543,8 +544,17 @@ component {
                     datasource: datasourceName,
                     username: dbUsername,
                     password: dbPassword,
-                    sid: dbSid
+                    oracleConnectionType: dbOracleConnectionType
                 };
+                
+                // Add SID or Service Name based on connection type
+                if (dbOracleConnectionType == "servicename") {
+                    oracleDsInfo.servicename = dbServiceName;
+                } else {
+                    oracleDsInfo.sid = dbSid;
+                }
+                
+                config.datasourceInfo = oracleDsInfo;
                 break;
             case "sqlite":
                 // SQLite requires absolute path - calculate it now
@@ -756,9 +766,17 @@ component {
             arrayAppend(envContent, "DB_USER=#arguments.config.datasourceInfo.username#");
             arrayAppend(envContent, "DB_PASSWORD=#arguments.config.datasourceInfo.password#");
 
-            // Add Oracle SID if exists
-            if (arguments.config.dbtype == "oracle" && structKeyExists(arguments.config.datasourceInfo, "sid")) {
-                arrayAppend(envContent, "DB_SID=#arguments.config.datasourceInfo.sid#");
+            // Add Oracle connection details if exists
+            if (arguments.config.dbtype == "oracle") {
+                if (structKeyExists(arguments.config.datasourceInfo, "sid") && len(trim(arguments.config.datasourceInfo.sid))) {
+                    arrayAppend(envContent, "DB_SID=#arguments.config.datasourceInfo.sid#");
+                }
+                if (structKeyExists(arguments.config.datasourceInfo, "servicename") && len(trim(arguments.config.datasourceInfo.servicename))) {
+                    arrayAppend(envContent, "DB_SERVICENAME=#arguments.config.datasourceInfo.servicename#");
+                }
+                if (structKeyExists(arguments.config.datasourceInfo, "oracleConnectionType")) {
+                    arrayAppend(envContent, "DB_ORACLE_CONNECTION_TYPE=#arguments.config.datasourceInfo.oracleConnectionType#");
+                }
             }
 
             // Add datasource name
@@ -975,10 +993,14 @@ component {
                 };
                 break;
             case "oracle":
+                // Oracle connection string depends on connection type (SID vs Service Name)
+                // Check for Service Name first, fallback to SID
                 config = {
                     class: "oracle.jdbc.OracleDriver",
                     bundleName: "org.lucee.oracle",
-                    connectionString: "jdbc:oracle:thin:@##this.env.DB_HOST##:##this.env.DB_PORT##:##this.env.DB_SID##"
+                    connectionString: "jdbc:oracle:thin:@##this.env.DB_HOST##:##this.env.DB_PORT##" &
+                        "##(structKeyExists(this.env, 'DB_ORACLE_CONNECTION_TYPE') && this.env.DB_ORACLE_CONNECTION_TYPE == 'servicename' ? '/' : ':')##" &
+                        "##(structKeyExists(this.env, 'DB_ORACLE_CONNECTION_TYPE') && this.env.DB_ORACLE_CONNECTION_TYPE == 'servicename' ? this.env.DB_SERVICENAME : this.env.DB_SID)##"
                 };
                 break;
             case "sqlite":
@@ -1035,6 +1057,17 @@ component {
             serverJson.env[arguments.environment]["DB_DATABASE"] = ds.database;
             serverJson.env[arguments.environment]["DB_USER"] = ds.username;
             serverJson.env[arguments.environment]["DB_PASSWORD"] = ds.password;
+            
+            // Add Oracle-specific connection details
+            if (structKeyExists(ds, "oracleConnectionType")) {
+                serverJson.env[arguments.environment]["DB_ORACLE_CONNECTION_TYPE"] = ds.oracleConnectionType;
+            }
+            if (structKeyExists(ds, "sid") && len(trim(ds.sid))) {
+                serverJson.env[arguments.environment]["DB_SID"] = ds.sid;
+            }
+            if (structKeyExists(ds, "servicename") && len(trim(ds.servicename))) {
+                serverJson.env[arguments.environment]["DB_SERVICENAME"] = ds.servicename;
+            }
         }
 
         fileWrite(serverJsonPath, serializeJSON(serverJson, true));
@@ -1188,20 +1221,17 @@ box server start port=8080 host=0.0.0.0";
 
         switch (arguments.template) {
             case "docker":
-                arrayAppend(steps, "1. Start Docker environment: docker-compose -f docker-compose.#arguments.environment#.yml up");
-                arrayAppend(steps, "2. Access application at: http://localhost:8080");
-                arrayAppend(steps, "3. Stop environment: docker-compose -f docker-compose.#arguments.environment#.yml down");
+                arrayAppend(steps, "Start Docker environment: docker-compose -f docker-compose.#arguments.environment#.yml up");
+                arrayAppend(steps, "Stop environment: docker-compose -f docker-compose.#arguments.environment#.yml down");
                 break;
             case "vagrant":
-                arrayAppend(steps, "1. Start Vagrant VM: vagrant up");
-                arrayAppend(steps, "2. Access application at: http://localhost:8080 or http://192.168.56.10:8080");
-                arrayAppend(steps, "3. SSH into VM: vagrant ssh");
-                arrayAppend(steps, "4. Stop VM: vagrant halt");
+                arrayAppend(steps, "Start Vagrant VM: vagrant up");
+                arrayAppend(steps, "SSH into VM: vagrant ssh");
+                arrayAppend(steps, "Stop VM: vagrant halt");
                 break;
             default:
-                arrayAppend(steps, "1. Switch to environment: wheels env switch #arguments.environment#");
-                arrayAppend(steps, "2. Start server: box server start");
-                arrayAppend(steps, "3. Access application at: http://localhost:8080");
+                arrayAppend(steps, "Switch to environment: wheels env switch #arguments.environment#");
+                arrayAppend(steps, "Start server: box server start");
         }
 
         return steps;
@@ -1520,6 +1550,9 @@ sudo -u postgres psql -c ""GRANT ALL PRIVILEGES ON DATABASE #arguments.databaseN
                 case "production":
                     include = (env.TYPE == "Production");
                     break;
+                case "custom":
+                    include = (env.TYPE == "Custom");
+                    break;
                 case "qa":
                     include = (env.TYPE == "QA");
                     break;
@@ -1659,43 +1692,6 @@ sudo -u postgres psql -c ""GRANT ALL PRIVILEGES ON DATABASE #arguments.databaseN
     }
 
     /**
-    * Get help information
-    */
-    private function getHelpInformation() {
-        var help = [];
-        arrayAppend(help, "wheels env list - List available environments");
-        arrayAppend(help, "");
-        arrayAppend(help, "Options:");
-        arrayAppend(help, "  --format <format>       Output format (table, json, yaml) [default: table]");
-        arrayAppend(help, "  --verbose              Show detailed configuration");
-        arrayAppend(help, "  --check                Validate environment configurations");
-        arrayAppend(help, "  --filter <type>        Filter by environment type");
-        arrayAppend(help, "  --sort <field>         Sort by (name, type, modified) [default: name]");
-        arrayAppend(help, "  --help                 Show this help information");
-        arrayAppend(help, "");
-        arrayAppend(help, "Filter options:");
-        arrayAppend(help, "  All                    Show all environments (default)");
-        arrayAppend(help, "  local                  Local environments only");
-        arrayAppend(help, "  development            Development environments");
-        arrayAppend(help, "  staging                Staging environments");
-        arrayAppend(help, "  production             Production environments");
-        arrayAppend(help, "  file                   File-based environments");
-        arrayAppend(help, "  server.json            Server.json environments");
-        arrayAppend(help, "  valid                  Valid environments only");
-        arrayAppend(help, "  issues                 Environments with issues");
-        arrayAppend(help, "");
-        arrayAppend(help, "Examples:");
-        arrayAppend(help, "  wheels env list");
-        arrayAppend(help, "  wheels env list --verbose");
-        arrayAppend(help, "  wheels env list --format json");
-        arrayAppend(help, "  wheels env list --filter production --check");
-        arrayAppend(help, "  wheels env list --sort modified --verbose");
-        
-        return arrayToList(help, chr(10));
-    }
-
-
-    /**
     * Gets the current environment using the same logic as Application.cfc
     * @projectRoot The root directory of the CFWheels project
     * @return String The current environment name, or empty string if not found
@@ -1770,7 +1766,9 @@ sudo -u postgres psql -c ""GRANT ALL PRIVILEGES ON DATABASE #arguments.databaseN
         required string port,
         required string username,
         required string password,
-        required string sid
+        required string sid,
+        string servicename = "",
+        string oracleConnectionType = "sid"
     ) {
         try {
             // Read existing environment file
@@ -1785,6 +1783,8 @@ sudo -u postgres psql -c ""GRANT ALL PRIVILEGES ON DATABASE #arguments.databaseN
                 DB_USER: false,
                 DB_PASSWORD: false,
                 DB_SID: false,
+                DB_SERVICENAME: false,
+                DB_ORACLE_CONNECTION_TYPE: false,
                 DB_DATASOURCE: false
             };
             var inDatabaseSection = false;
@@ -1858,8 +1858,26 @@ sudo -u postgres psql -c ""GRANT ALL PRIVILEGES ON DATABASE #arguments.databaseN
                 // Update DB_SID (Oracle only)
                 if (findNoCase("DB_SID=", trimmedLine) == 1) {
                     dbVarsFound.DB_SID = true;
-                    if (lCase(arguments.dbtype) == "oracle" && len(trim(arguments.sid))) {
+                    if (lCase(arguments.dbtype) == "oracle" && len(trim(arguments.sid)) && arguments.oracleConnectionType == "sid") {
                         arrayAppend(updatedLines, "DB_SID=#arguments.sid#");
+                    }
+                    continue;
+                }
+
+                // Update DB_SERVICENAME (Oracle Service Name only)
+                if (findNoCase("DB_SERVICENAME=", trimmedLine) == 1) {
+                    dbVarsFound.DB_SERVICENAME = true;
+                    if (lCase(arguments.dbtype) == "oracle" && len(trim(arguments.servicename)) && arguments.oracleConnectionType == "servicename") {
+                        arrayAppend(updatedLines, "DB_SERVICENAME=#arguments.servicename#");
+                    }
+                    continue;
+                }
+
+                // Update DB_ORACLE_CONNECTION_TYPE (Oracle only)
+                if (findNoCase("DB_ORACLE_CONNECTION_TYPE=", trimmedLine) == 1) {
+                    dbVarsFound.DB_ORACLE_CONNECTION_TYPE = true;
+                    if (lCase(arguments.dbtype) == "oracle" && len(trim(arguments.oracleConnectionType))) {
+                        arrayAppend(updatedLines, "DB_ORACLE_CONNECTION_TYPE=#arguments.oracleConnectionType#");
                     }
                     continue;
                 }
@@ -1904,8 +1922,16 @@ sudo -u postgres psql -c ""GRANT ALL PRIVILEGES ON DATABASE #arguments.databaseN
                 arrayAppend(missingVars, "DB_PASSWORD=#arguments.password#");
             }
 
-            if (!dbVarsFound.DB_SID && lCase(arguments.dbtype) == "oracle" && len(trim(arguments.sid))) {
+            if (!dbVarsFound.DB_SID && lCase(arguments.dbtype) == "oracle" && len(trim(arguments.sid)) && arguments.oracleConnectionType == "sid") {
                 arrayAppend(missingVars, "DB_SID=#arguments.sid#");
+            }
+
+            if (!dbVarsFound.DB_SERVICENAME && lCase(arguments.dbtype) == "oracle" && len(trim(arguments.servicename)) && arguments.oracleConnectionType == "servicename") {
+                arrayAppend(missingVars, "DB_SERVICENAME=#arguments.servicename#");
+            }
+
+            if (!dbVarsFound.DB_ORACLE_CONNECTION_TYPE && lCase(arguments.dbtype) == "oracle" && len(trim(arguments.oracleConnectionType))) {
+                arrayAppend(missingVars, "DB_ORACLE_CONNECTION_TYPE=#arguments.oracleConnectionType#");
             }
 
             if (!dbVarsFound.DB_DATASOURCE) {

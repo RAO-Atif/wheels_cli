@@ -52,11 +52,8 @@ component  aliases='wheels g route, wheels g routes, wheels generate routes' ext
 		}
 
 		var target = fileSystemUtil.resolvePath("config/routes.cfm");
-
-		// Read file ONCE
-		var originalContent = fileRead(target);        // preserve comments & formatting
+	    var originalContent = fileRead(target);        // preserve comments & formatting
 		var content = removeComments(originalContent); // used ONLY for duplicate checks
-
 		var inject = "";
 		var routeType = "";
 
@@ -99,18 +96,20 @@ component  aliases='wheels g route, wheels g routes, wheels generate routes' ext
 			inject = '.resources("' & obj.objectNamePlural & '")';
 			routeType = "resources";
 		}
-			// Route generation by using cli 
+		
+		// Route generation by using cli 
 			// Find the correct indentation level
 			var baseIndent = chr(9) & chr(9);
 			var marker = baseIndent & '// CLI-Appends-Here';
 			var injectLocation = '';
 			var injectPoint = '';
-			var formattedInject = baseIndent & inject;			// Check for duplicate route before injecting
+			// Check for duplicate route before injecting
 			if (findNoCase(inject, content)) {
 				details.skip("config/routes.cfm (route already exists)");
 				return;
 			}
-			if (find(marker, content)) {
+
+	if (find(marker, content)) {
 				injectLocation = 'marker';
 				injectPoint = marker;
 			} 
@@ -122,21 +121,30 @@ component  aliases='wheels g route, wheels g routes, wheels generate routes' ext
 				details.skip("No valid injection point found");
 				return;
 			}
+			var formattedInject = baseIndent & inject;
+
 				if (injectLocation == 'marker') {
-			originalContent = replace(originalContent,injectPoint,formattedInject & cr & injectPoint,
+			originalContent = replace(
+				originalContent,
+				injectPoint,
+				formattedInject & cr & injectPoint,
 				"one"
 			);
 			} else {
-				originalContent = replace(originalContent,injectPoint,injectPoint & cr & formattedInject,
+				originalContent = replace(
+					originalContent,
+					injectPoint,
+					injectPoint & cr & formattedInject,
 					"one"
 				);
 			}
 				file action='write' file='#target#' mode='777' output='#trim(originalContent)#';
+
 		// Output detail message
-			details.header("Route Generation");
-			details.route(inject);
-			details.update("config/routes.cfm");
-			details.success("Route added successfully!");
+		details.header("Route Generation");
+		details.route(inject);
+		details.update("config/routes.cfm");
+		details.success("Route added successfully!");
 	}
 
 	/**

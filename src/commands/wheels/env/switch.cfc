@@ -6,7 +6,7 @@
  * wheels env switch staging --backup --force
  * wheels env switch testing --quiet
  */
-component aliases="wheels set env, wheels set environment,wheels set envr" extends="../base" {
+component extends="../base" {
     
     property name="environmentService" inject="EnvironmentService@wheels-cli";
     property name="detailOutput" inject="DetailOutputService@wheels-cli";
@@ -257,7 +257,6 @@ component aliases="wheels set env, wheels set environment,wheels set envr" exten
         if (!fileExists(configFile)) {
             errors.append("config/#arguments.environment#/settings.cfm file not found");
         }
-    
         
         // If both files are missing, it's invalid
         if (arrayLen(errors) == 2) {
@@ -266,7 +265,7 @@ component aliases="wheels set env, wheels set environment,wheels set envr" exten
                 error: "Environment '#arguments.environment#' is not configured. Missing required files: #arrayToList(errors, ' and ')#"
             };
         }
-    
+        
         // If one file exists but not the other, it's valid but with a warning
         if (arrayLen(errors) == 1) {
             return {
@@ -295,6 +294,7 @@ component aliases="wheels set env, wheels set environment,wheels set envr" exten
                     error: ".env file not found"
                 };
             }
+            
             var backupFile = "#arguments.projectRoot#/.env.backup-#timestamp#";
             fileCopy(envFile, backupFile);
             
@@ -315,7 +315,6 @@ component aliases="wheels set env, wheels set environment,wheels set envr" exten
             };
         }
     }
-
     
     /**
      * Restart the application

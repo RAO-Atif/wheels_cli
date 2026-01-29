@@ -891,7 +891,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				}
 			}
 		}
-		
+
 		// Check environment variable (case-insensitive)
 		if (!Len(local.environment)) {
 			local.sysEnv = CreateObject("java", "java.lang.System");
@@ -903,6 +903,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				}
 			}
 		}
+
 		// Default to development
 		if (!Len(local.environment)) {
 			local.environment = "development";
@@ -981,44 +982,6 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 		}
 	}
 
-	// comment function 
-			public boolean function addLineIgnoringComments(required string filePath, required string newLine) {
-			if (!FileExists(arguments.filePath)) {
-				printLine("File not found: " & arguments.filePath);
-				return false;
-			}
-			local.content = FileRead(arguments.filePath);
-			local.lines = ListToArray(local.content, Chr(10));
-		
-			local.nonCommentLines = [];
-			for (local.line in local.lines) {
-				if (!REFindNoCase("^\s*//", local.line) && 
-					!REFindNoCase("^\s*/\*", local.line)&&         
-					!REFindNoCase("<!---[\s\S]*?--->", local.line)) {
-					ArrayAppend(local.nonCommentLines, local.line);
-				}
-			}
-			if (ArrayFindNoCase(local.nonCommentLines, arguments.newLine)) {
-				Print.Line("Line already exists in non-comment lines. Skipping.");
-				return false;
-			}
-			// append at the end 
-			FileWrite(arguments.filePath, local.content & Chr(10) & arguments.newLine & Chr(10));
-			Print.Line("Added line: " & arguments.newLine);
-			return true;
-		}	
-
-       // Helper function to remove comments from content
-	public function removeComments(content) {
-            var cleanedContent = content;
-            cleanedContent = replace(cleanedContent, "// CLI-Appends-Here", "##CLI_APPENDS_HERE##", "ALL");
-            cleanedContent = reReplace(cleanedContent, "<!---[\s\S]*?--->", "", "ALL");
-            cleanedContent = reReplace(cleanedContent, "\/\*[\s\S]*?\*\/", "", "ALL");
-            cleanedContent = reReplace(cleanedContent, "//[^\r\n]*", "", "ALL");
-            cleanedContent = replace(cleanedContent, "##CLI_APPENDS_HERE##", "// CLI-Appends-Here", "ALL");
-            return cleanedContent;
-        }
-		
 	/**
 	 * Build JDBC URL for connecting to system database (for database creation/management)
 	 */
@@ -1034,6 +997,8 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				// Connect to information_schema for MySQL system operations
 				return "jdbc:mysql://#local.host#:#local.port#/information_schema";
 			case "PostgreSQL":
+			case "Postgres":
+			case "Postgre":
 				if (!Len(local.port)) local.port = "5432";
 				// Connect to postgres system database
 				return "jdbc:postgresql://#local.host#:#local.port#/postgres";
@@ -1046,7 +1011,12 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				if (!Len(local.port)) local.port = "1521";
 				// Connect using SID (Oracle system identifier)
 				local.sid = arguments.dsInfo.sid ?: "FREE";
-				return "jdbc:oracle:thin:@#local.host#:#local.port#:#local.sid#";
+				// Build Oracle JDBC URL
+				if (StructKeyExists(arguments.dsInfo, "serviceName") && Len(arguments.dsInfo.serviceName)) {
+					return "jdbc:oracle:thin:@//#local.host#:#local.port#/#arguments.dsInfo.serviceName#";
+				} else {
+					return "jdbc:oracle:thin:@#local.host#:#local.port#:#local.sid#";
+				}
 			case "H2":
 				// H2 databases are created automatically, no system database needed
 				local.database = arguments.dsInfo.database ?: "";
@@ -1055,6 +1025,16 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				return "";
 		}
 	}
+	 // Helper function to remove comments from content
+	public function removeComments(content) {
+            var cleanedContent = content;
+            cleanedContent = replace(cleanedContent, "// CLI-Appends-Here", "##CLI_APPENDS_HERE##", "ALL");
+            cleanedContent = reReplace(cleanedContent, "<!---[\s\S]*?--->", "", "ALL");
+            cleanedContent = reReplace(cleanedContent, "\/\*[\s\S]*?\*\/", "", "ALL");
+            cleanedContent = reReplace(cleanedContent, "//[^\r\n]*", "", "ALL");
+            cleanedContent = replace(cleanedContent, "##CLI_APPENDS_HERE##", "// CLI-Appends-Here", "ALL");
+            return cleanedContent;
+        }
 
 	/**
 	 * Print formatted output helpers
@@ -1357,10 +1337,83 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 		return local.databases;
 	}
 
-		/**
-	* Get database connection
-	* This function should be added to base.cfc
-	*/
+	private struct function getSqliteDatabaseConnection(required struct dsInfo, required string dbType) {
+		local.conn = "";
+
+		// Get database configuration
+		local.config = getDatabaseConfig( arguments.dbType, arguments.dsInfo );
+
+		// Try each driver class
+		local.driverLoaded = false;
+
+		for ( local.driverClass in local.config.driverClasses ) {
+
+			// IMPORTANT:
+			// CommandBox CLI + Lucee cannot reliably use Class.forName()
+			// for SQLite, even when the driver is present on the JVM.
+			// SQLite JDBC (JDBC 4+) auto-registers, so touching the class
+			// is sufficient.
+			CreateObject( "java", local.driverClass );
+			local.driverLoaded = true;
+			break;	
+		}
+
+		if ( !local.driverLoaded ) {
+			return {
+				success   : false,
+				error     : "No suitable JDBC driver found for #arguments.dbType#. Tried: "
+						& ArrayToList( local.config.driverClasses, ", " ),
+				connection: ""
+			};
+		}
+
+		// Create properties
+		local.props = CreateObject( "java", "java.util.Properties" ).init();
+
+		// Common credentials
+		if ( Len( arguments.dsInfo.username ) ) {
+			local.props.setProperty( "user", arguments.dsInfo.username );
+		}
+		if ( Len( arguments.dsInfo.password ) ) {
+			local.props.setProperty( "password", arguments.dsInfo.password );
+		}
+
+		// SQLite-specific properties
+		local.props.setProperty( "busy_timeout", "5000" );
+		local.props.setProperty( "journal_mode", "WAL" );
+		local.props.setProperty( "synchronous", "NORMAL" );
+
+		// Ensure database directory exists
+		if (
+			Len( local.config.tempDS.database )
+			&& !FileExists( local.config.tempDS.database )
+		) {
+			local.dbDir = GetDirectoryFromPath(
+				local.config.tempDS.database
+			);
+
+			if ( Len( local.dbDir ) && !DirectoryExists( local.dbDir ) ) {
+				DirectoryCreate( local.dbDir, true );
+			}
+		}
+
+		// Get connection (DriverManager will auto-discover SQLite driver)
+		local.driverManager = CreateObject( "java", "java.sql.DriverManager" );
+		local.conn = local.driverManager.getConnection(
+			local.config.jdbcUrl,
+			local.props
+		);
+
+		// Test connection
+		local.conn.setAutoCommit( false );
+
+		return {
+			success : true,
+			connection : local.conn,
+			jdbcUrl : local.config.jdbcUrl
+		};
+	}
+
 	private struct function getDatabaseConnection(required struct dsInfo, required string dbType, string systemDatabase = "") {
 		local.result = {
 			success: false,
@@ -1378,7 +1431,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 			local.username = local.dbConfig.tempDS.username ?: "";
 			local.password = local.dbConfig.tempDS.password ?: "";
 			
-			printStep("Connecting to " & arguments.dbType & " database...");
+			detailOutput.output("Connecting to " & arguments.dbType & " database...");
 			
 			// Try to load driver
 			local.driver = "";
@@ -1389,7 +1442,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 					local.driver = createObject("java", local.driverClass);
 					local.result.driverClass = local.driverClass;
 					local.driverFound = true;
-					printSuccess("Driver found: " & local.driverClass);
+					detailOutput.statusSuccess("Driver found: " & local.driverClass);
 					break;
 				} catch (any driverError) {
 					// Continue trying other drivers
@@ -1413,8 +1466,6 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 			}
 			
 			// Connect using driver directly
-			print.line(local.url);
-			print.redLine(local.props);
 			local.conn = local.driver.connect(local.url, local.props);
 			
 			if (isNull(local.conn)) {
@@ -1424,7 +1475,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 			
 			local.result.success = true;
 			local.result.connection = local.conn;
-			printSuccess("Connected successfully to " & arguments.dbType & " database!");
+			detailOutput.statusSuccess("Connected successfully to " & arguments.dbType & " database!");
 			return local.result;
 			
 		} catch (any e) {
@@ -1443,7 +1494,8 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 	private struct function getDatabaseConfig(required string dbType, required struct dsInfo, string systemDatabase = "") {
 		local.config = {
 			tempDS: Duplicate(arguments.dsInfo),
-			driverClasses: []
+			driverClasses: [],
+			jdbcUrl: ""
 		};
 
 		switch (arguments.dbType) {
@@ -1458,6 +1510,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 					"com.mysql.jdbc.Driver",
 					"org.mariadb.jdbc.Driver"
 				];
+				local.config.jdbcUrl = "jdbc:mysql://#local.config.tempDS.host#:#local.config.tempDS.port#/#local.config.tempDS.database#";
 				break;
 
 			case "PostgreSQL":
@@ -1470,6 +1523,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 					"org.postgresql.Driver",
 					"postgresql.Driver"
 				];
+				local.config.jdbcUrl = "jdbc:postgresql://#local.config.tempDS.host#:#local.config.tempDS.port#/#local.config.tempDS.database#";
 				break;
 
 			case "SQLServer":
@@ -1482,6 +1536,7 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				local.config.driverClasses = [
 					"com.microsoft.sqlserver.jdbc.SQLServerDriver"
 				];
+				local.config.jdbcUrl = "jdbc:sqlserver://#local.config.tempDS.host#:#local.config.tempDS.port#;databaseName=#local.config.tempDS.database#";
 				break;
 
 			case "Oracle":
@@ -1495,6 +1550,12 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 					"oracle.jdbc.OracleDriver",
 					"oracle.jdbc.driver.OracleDriver"
 				];
+				// Build Oracle JDBC URL
+				if (StructKeyExists(arguments.dsInfo, "serviceName") && Len(arguments.dsInfo.serviceName)) {
+					local.config.jdbcUrl = "jdbc:oracle:thin:@//#local.config.tempDS.host#:#local.config.tempDS.port#/#arguments.dsInfo.serviceName#";
+				} else {
+					local.config.jdbcUrl = "jdbc:oracle:thin:@#local.config.tempDS.host#:#local.config.tempDS.port#:#local.config.tempDS.database#";
+				}
 				break;
 
 			case "H2":
@@ -1502,6 +1563,48 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
 				local.config.driverClasses = [
 					"org.h2.Driver"
 				];
+				local.config.jdbcUrl = "jdbc:h2:#local.config.tempDS.database#";
+				break;
+
+			case "SQLite":
+			case "SQLite3":
+				// SQLite uses file path as database
+				// For SQLite, the "database" field is actually a file path
+				if (Len(arguments.dsInfo.database)) {
+					local.dbPath = arguments.dsInfo.database;
+					
+					// Resolve relative paths
+					if (!FileExists(local.dbPath)) {
+						// Try relative to current directory
+						local.appPath = getCWD();
+						local.resolvedPath = fileSystemUtil.resolvePath(local.appPath & "/" & local.dbPath);
+						if (FileExists(local.resolvedPath)) {
+							local.dbPath = local.resolvedPath;
+						}
+					}
+					
+					local.config.tempDS.database = local.dbPath;
+				}
+				
+				local.config.driverClasses = [
+					"org.sqlite.JDBC",
+					"org.xerial.sqlite.JDBC",
+					"SQLite.JDBCDriver"
+				];
+				
+				// Build SQLite JDBC URL
+				if (Len(local.config.tempDS.database)) {
+					local.config.jdbcUrl = "jdbc:sqlite:" & local.config.tempDS.database;
+				} else {
+					local.config.jdbcUrl = "jdbc:sqlite:";
+				}
+				
+				// SQLite-specific connection properties
+				local.config.connectionProperties = {
+					"busy_timeout": "5000",
+					"journal_mode": "WAL",
+					"synchronous": "NORMAL"
+				};
 				break;
 		}
 
@@ -1668,6 +1771,3 @@ component extends="wheels-cli.models.BaseCommand" excludeFromHelp=true {
    
 
 }
-
-
-

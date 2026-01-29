@@ -21,15 +21,13 @@ component extends="../base" {
 		required string value,
 		string environment = ""
 	) {
-		    local.appPath = getCWD();
-
+		local.appPath = getCWD();
+		
 		if (!isWheelsApp(local.appPath)) {
 			error("This command must be run from a Wheels application directory");
 			return;
 		}
-		local.appPath = getCWD();
-
-
+		
 		try {
 			// Determine environment
 			if (!Len(arguments.environment)) {
@@ -44,6 +42,7 @@ component extends="../base" {
 			}
 
 			local.environment = getEnvironment(local.appPath);
+			writeOutput("Current environment detected: " & local.environment & Chr(10));
 			detailOutput.output("Current environment detected: " & local.environment & Chr(10));
 
 			local.configDir = local.appPath & "/config/";
@@ -65,9 +64,10 @@ component extends="../base" {
 			}
 			detailOutput.success("Settings file to update: " & local.settingsFile & Chr(10));
 
-
 			if (!FileExists(local.settingsFile)) {
-				detailOutput.output("Settings file not found for environment: " & local.environment & Chr(10));
+				detailOutput.output(
+					"Settings file not found for environment: " & local.environment & Chr(10)
+				);
 				return;
 			}
 
@@ -114,11 +114,11 @@ component extends="../base" {
 					detailOutput.success("Inserted setting: " & arguments.settingName & " = " & local.newValue & Chr(10));
 
 				} else {
+					
 					detailOutput.success("<" & "cfscript> tag found in settings file");
 				}
 			}
-			
-			
+					
 			// Create directory if it doesn't exist
 			local.settingsDir = GetDirectoryFromPath(local.settingsFile);
 			if (!DirectoryExists(local.settingsDir)) {
@@ -129,12 +129,14 @@ component extends="../base" {
 			
 			if (!FileExists(local.settingsFile)) {
 				detailOutput.output("If the file doesn't exist, create it with this content:");
-				print.line();
 				detailOutput.output("<" & "cfscript>");
 				detailOutput.output("    set(" & arguments.settingName & " = " & local.formattedValue & ");");
 				detailOutput.output("</" & "cfscript>");
 			}
 			
+			print.line();
+			detailOutput.output("After making the change, reload your application with:");
+			detailOutput.output("wheels reload " & arguments.environment);
 
 		} catch (any e) {
 			error("Error: " & e.message);
@@ -143,7 +145,6 @@ component extends="../base" {
 			}
 		}
 	}
-
 
 	private string function formatValue(required string value) {
 		// Handle boolean values

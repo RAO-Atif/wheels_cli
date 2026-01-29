@@ -30,7 +30,9 @@ component extends="../base" {
         string port = "",
         string username = "",
         string password = "",
-        string sid = "",
+                string sid = "",
+                string servicename = "",
+                string oracleConnectionType = "sid",
         boolean force = false,
         string base = "",
         boolean debug = false,
@@ -77,9 +79,9 @@ component extends="../base" {
                 detailOutput.statusWarning("Environment '#arguments.environment#' already exists.");
                 detailOutput.statusInfo("What would you like to do?");
                 detailOutput.line();
-                detailOutput.output("  1. Overwrite entire environment file", true);
-                detailOutput.output("  2. Update only database variables (preserve other settings)", true);
-                detailOutput.output("  3. Cancel", true);
+                detailOutput.output("1. Overwrite entire environment file", true);
+                detailOutput.output("2. Update only database variables (preserve other settings)", true);
+                detailOutput.output("3. Cancel", true);
                 detailOutput.line();
 
                 var choice = ask("Select option [1-3]: ");
@@ -87,15 +89,15 @@ component extends="../base" {
                 switch(choice) {
                     case "1":
                         updateMode = "overwrite";
-                        detailOutput.statusSuccess("Will overwrite environment file...");
+                        detailOutput.output("Will overwrite environment file...");
                         break;
                     case "2":
                         updateMode = "update";
-                        detailOutput.statusSuccess("Will update only database variables...");
+                        detailOutput.output("Will update only database variables...");
                         break;
                     case "3":
                     default:
-                        detailOutput.statusWarning("Environment setup cancelled.");
+                        detailOutput.statusFailed("Environment setup cancelled.");
                         return;
                 }
                 detailOutput.line();
@@ -157,11 +159,34 @@ component extends="../base" {
                     arguments.password = ask(message="Database Password: ", mask="*");
                 }
 
-                // Prompt for SID if Oracle
-                if (lCase(arguments.dbtype) == "oracle" && !len(trim(arguments.sid))) {
-                    arguments.sid = ask("SID [FREE]: ");
-                    if (!len(trim(arguments.sid))) {
-                        arguments.sid = "FREE";
+                // Prompt for Oracle connection details if Oracle
+                if (lCase(arguments.dbtype) == "oracle") {
+                    if (!len(trim(arguments.oracleConnectionType)) || 
+                        (!len(trim(arguments.sid)) && !len(trim(arguments.servicename)))) {
+                        
+                        detailOutput.output("Oracle Connection Type:");
+                        detailOutput.output("1. SID (System Identifier)");
+                        detailOutput.output("2. Service Name");
+                        detailOutput.line();
+                        
+                        var connectionTypeChoice = ask("Select connection type [1-2]: ");
+                        
+                        if (connectionTypeChoice == "2") {
+                            // Service Name
+                            arguments.servicename = ask("Service Name: ");
+                            if (!len(trim(arguments.servicename))) {
+                                detailOutput.statusWarning("Service Name is required");
+                                return;
+                            }
+                            arguments.oracleConnectionType = "servicename";
+                        } else {
+                            // SID (default)
+                            arguments.sid = ask("SID [FREE]: ");
+                            if (!len(trim(arguments.sid))) {
+                                arguments.sid = "FREE";
+                            }
+                            arguments.oracleConnectionType = "sid";
+                        }
                     }
                 }
 
@@ -205,21 +230,11 @@ component extends="../base" {
                     detailOutput.statusWarning("Database creation failed - #e.message#");
                     detailOutput.line();
                     detailOutput.statusInfo("You can create it manually with:");
-                    detailOutput.output("  wheels db create datasource=#datasourceName# database=#databaseName# environment=#arguments.environment# dbtype=#arguments.dbtype#", true);
+                    detailOutput.output("wheels db create datasource=#datasourceName# database=#databaseName# environment=#arguments.environment# dbtype=#arguments.dbtype#", true);
                     detailOutput.line();
                 }
             }
 
-            if (result.keyExists("nextSteps") && arrayLen(result.nextSteps)) {
-                detailOutput.statusInfo("Next Steps:");
-                detailOutput.line();
-
-                for (var step in result.nextSteps) {
-                    detailOutput.output("  - #step#", true);
-                }
-                detailOutput.line();
-            }
-            
             // Show summary
             detailOutput.subHeader("Summary");
             detailOutput.metric("Environment", arguments.environment);
@@ -231,6 +246,17 @@ component extends="../base" {
             }
             detailOutput.metric("Debug Mode", arguments.debug ? "Enabled" : "Disabled");
             detailOutput.metric("Cache Mode", arguments.cache ? "Enabled" : "Disabled");
+            detailOutput.line();
+            
+            if (result.keyExists("nextSteps") && arrayLen(result.nextSteps)) {
+                detailOutput.statusInfo("Next Steps:");
+                detailOutput.line();
+
+                for (var step in result.nextSteps) {
+                    detailOutput.output("- #step#", true);
+                }
+                detailOutput.line();
+            }
             
         } else {
             detailOutput.error("Setup failed: #result.error#");

@@ -7,7 +7,6 @@
  * {code}
  */
 component extends="../base" {
-
 	property name="detailOutput" inject="DetailOutputService@wheels-cli";
 
 	/**
@@ -20,13 +19,12 @@ component extends="../base" {
 		string environment = ""
 	) {
 		local.appPath = getCWD();
-		detailOutput.output(local.appPath);
-		detailOutput.output(local.appPath  & "atifrao");
 		
 		if (!isWheelsApp(local.appPath)) {
 			error("This command must be run from a Wheels application directory");
 			return;
 		}
+
 		try {
 			// Determine environment
 			if (!Len(arguments.environment)) {
@@ -39,8 +37,7 @@ component extends="../base" {
 				error("Invalid environment: #arguments.environment#");
 				return;
 			}
-			// datasource added by commands 
-	 	    local.filePath = local.appPath & "/config/settings.cfm";
+			local.filePath = local.appPath & "/config/settings.cfm";
 			local.originalContent = fileRead(local.filePath);
             local.activeContent   = removeComments(local.originalContent); 
 
@@ -58,7 +55,6 @@ component extends="../base" {
 						detailOutput.statusFixed("Datasource replaced successfully");
 						return;
 					}
-            
 		    local.newPattern = '(?i)(\s*//\s*CLI-Appends-Here)';
 		        if (reFindNoCase(local.newPattern, local.activeContent)) {
 										local.updatedContent = reReplaceNoCase(
@@ -94,20 +90,8 @@ component extends="../base" {
 					detailOutput.statusSuccess("Datasource added inside " & local.filePath);
 				}
 		           return;
-	
+
 			// Use the set settings functionality
-				//local.detectContent = removeSupportedComments(local.fileContent);
-			// Use the set settings functionality
-			/*
-			local.targetPattern ='(?mi)^\s*set\s*\(\s*dataSourceName\s*=\s*["''].*?["'']\s*\)\s*;?';
-			local.hasDatasource = reFindNoCase(local.targetPattern, local.detectContent);
-			local.cleanedContent = reReplaceNoCase(
-				local.fileContent,
-				local.targetPattern,
-				"",
-				"all"
-			);
-			*/
 			local.settingsCommand = CreateObject("component", "settings");
 			local.settingsCommand.setShell(shell);
 			local.settingsCommand.setPrint(print);
@@ -119,8 +103,8 @@ component extends="../base" {
 				environment = arguments.environment
 			);
 			
-			detailOutput.output();
-			detailOutput.statusSuccess("Datasource set to: " & arguments.datasourceName);
+			print.line();
+			detailOutput.success("Datasource set to: " & arguments.datasourceName);
 			
 			// Additional datasource validation if server is running
 			try {
@@ -129,16 +113,16 @@ component extends="../base" {
 				if (StructKeyExists(local.serverDetails, "serverInfo") && 
 				    StructKeyExists(local.serverDetails.serverInfo, "datasources") &&
 				    StructKeyExists(local.serverDetails.serverInfo.datasources, arguments.datasourceName)) {
-					print.greenLine("Datasource exists in server configuration");
+					detailOutput.success("Datasource exists in server configuration");
 				} else {
-					print.yellowLine("Warning: Unable to verify datasource '" & arguments.datasourceName & "' in server configuration");
-					print.line("You may need to create this datasource in your CFML server admin");
+					detailOutput.output("Warning: Unable to verify datasource '" & arguments.datasourceName & "' in server configuration");
+					detailOutput.output("You may need to create this datasource in your CFML server admin");
 				}
 			} catch (any e) {
 				// Server might not be running, skip validation
-				print.line("Note: Unable to verify datasource configuration (server may not be running)");
+				detailOutput.output("Note: Unable to verify datasource configuration (server may not be running)");
 			}
-	
+			
 		} catch (any e) {
 			error("Error setting datasource: " & e.message);
 		}
@@ -157,7 +141,7 @@ component extends="../base" {
 				local.environment = Trim(Mid(local.envContent, local.envMatch.pos[2], local.envMatch.len[2]));
 			}
 		}
-
+		
 		// Check environment variable
 		if (!Len(local.environment)) {
 			local.sysEnv = CreateObject("java", "java.lang.System");
@@ -174,7 +158,5 @@ component extends="../base" {
 		
 		return local.environment;
 	}
-	
-
 
 }

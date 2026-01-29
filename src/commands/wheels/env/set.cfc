@@ -8,7 +8,7 @@
  * wheels env set --file=.env.production API_KEY=secret
  * {code}
  */
-component extends="../base" {
+component extends="commandbox.modules.wheels-cli.commands.wheels.base" {
 
 	// Inject DetailOutputService
 	property name="detailOutput" inject="DetailOutputService@wheels-cli";
@@ -35,16 +35,10 @@ component extends="../base" {
 		if (StructIsEmpty(local.updates)) {
 			detailOutput.error("No key=value pairs provided. Usage: wheels env set KEY=VALUE");
 		}
-		//The DB_PORT must contain only numbers.
-        if (structKeyExists(local.updates, "DB_PORT") && !isNumeric(local.updates.DB_PORT)) {
-            detailOutput.error("DB_PORT must be a number");
-			return;
-        }   
+
 		// Update the .env file
 		local.envFile = ResolvePath(arguments.file);
-		updateEnvFile(local.envFile, local.updates);		 
-      
-
+		updateEnvFile(local.envFile, local.updates);
 	}
 
 
@@ -131,7 +125,6 @@ component extends="../base" {
 		try {
 			FileWrite(arguments.envFile, local.envContent);
 			
-			
 			detailOutput.line();
 			detailOutput.statusSuccess("Environment variables updated in #GetFileFromPath(arguments.envFile)#:");
 
@@ -150,7 +143,6 @@ component extends="../base" {
 
 				detailOutput.metric(local.key, ReReplace(local.displayValue, ',$', '', 'all'));
 			}
-			
 
 			// Warn if .env is not in .gitignore
 			if (arguments.envFile contains ".env") {

@@ -13,9 +13,9 @@ component  extends="base"  {
 	 **/
 	function run(  ) {
 		var current={
-			directory     = getCWD(),
-			moduleRoot    = expandPath("/wheels-cli/"),
-			wheelsVersion = $getWheelsVersion()
+			directory		= getCWD(),
+			moduleRoot		= expandPath("/wheels-cli/"),
+			wheelsVersion	= $getWheelsVersion()
 		};
 		print.redLine(",--.   ,--.,--.                   ,--.            ,-----.,--.   ,--. ")
 			.redLine("|  |   |  ||  ,---.  ,---.  ,---. |  | ,---.     '  .--./|  |   |  | ")
